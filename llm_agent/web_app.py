@@ -21,11 +21,7 @@ def process():
         user_data = extract_poker_info(input_text)
 
         # Process the input using the existing functions
-        prepare_prompt(user_data)
-
-        # Read the prepared prompt
-        with open("llm_agent/prompt.txt", encoding="utf-8") as f:
-            prompt = f.read()
+        prompt = prepare_prompt(user_data)
 
         # Get the explanation from the LLM
         content = explain(

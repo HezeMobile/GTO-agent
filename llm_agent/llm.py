@@ -216,7 +216,7 @@ def prepare_prompt(user_data: dict) -> str:
         "river": user_data["river"][0] if user_data["river"] else "",
         "actions": actions,
     }
-    json.dump(data, open("game_info_processed.json", "w"))
+    # json.dump(data, open("game_info_processed.json", "w"))
     response = requests.post("http://127.0.0.1:8080/demo/getGto", json=data)
     response = response.json()
     # print(response)
@@ -274,11 +274,11 @@ def prepare_prompt(user_data: dict) -> str:
         query=query,
     )
 
-    with open("llm_agent/prompt.txt", "w") as f:
-        f.write(user_prompt)
-        f.close()
+    # with open("llm_agent/prompt.txt", "w") as f:
+    #     f.write(user_prompt)
+    #     f.close()
 
-    return
+    return user_prompt
 
 
 def explain(sys_prompt: str, user_prompt: str, model: str) -> str:
@@ -334,12 +334,7 @@ def main() -> None:
     )
 
     user_data = extract_poker_info(input_text)
-    # user_data = json.load(open("game_info.json"))
-    prepare_prompt(user_data)
-
-    with open("llm_agent/prompt.txt", encoding="utf-8") as f:
-        prompt = f.read()
-
+    prompt = prepare_prompt(user_data)
     content = explain(sys_prompt=SYSTEM_PROMPT, user_prompt=prompt, model=args.model)
     content = force_correct(content)
 

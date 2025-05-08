@@ -127,7 +127,7 @@ def extract_poker_info(input_text: str) -> Dict[str, Any]:
         if match:
             game_info = json.loads(match.group(0))
             formatted_info = format_game_info(game_info)
-            json.dump(formatted_info, open("game_info.json", "w"))
+            # json.dump(formatted_info, open("game_info.json", "w"))
             return formatted_info
         else:
             return "Error extracting poker information: {str(e)}"
@@ -143,7 +143,7 @@ def main():
         "输入当前信息，请至少包含双方位置、玩家手牌、公共牌面和双方动作："
     )
     result = extract_poker_info(input_text)
-    json.dump(result, open("game_info.json", "w"))
+    # json.dump(result, open("game_info.json", "w"))
     print("\nExtracted Information:")
     print(result)
 
