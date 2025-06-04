@@ -8,7 +8,7 @@ import copy
 
 import openai
 
-os.environ["OPENAI_API_KEY"] = "sk-8c6fd7cbaf5842d09cdd23be37ba0ecf"
+os.environ["OPENAI_API_KEY"] = ""
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gto_facts_converter import Board
