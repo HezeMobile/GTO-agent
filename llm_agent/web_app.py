@@ -6,7 +6,7 @@ from poker_text_detector import PokerTextDetector
 
 app = Flask(__name__)
 app.secret_key = (
-    "sk-8c6fd7cbaf5842d09cdd23be37ba0ecf"  # Required for session management
+    ""  # Required for session management
 )
 
 
