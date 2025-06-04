@@ -7,9 +7,8 @@ import requests
 import copy
 
 import openai
-from google import genai
-from google.genai import types
 
+os.environ["OPENAI_API_KEY"] = "sk-8c6fd7cbaf5842d09cdd23be37ba0ecf"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gto_facts_converter import Board
@@ -19,7 +18,9 @@ from gto_facts_converter import (
     evaluate_hand_with_board_filter,
     get_top_combinations,
 )
+from poker_text_detector import PokerTextDetector
 from game_info_extractor import extract_poker_info
+
 
 TERM_MAP = {
     "high_card": "高牌",
@@ -48,7 +49,7 @@ QUERY = """有效筹码量：{effective_stack}BB
 对手手牌范围：{op_range}
 GTO的结果：{gto}"""
 
-SYSTEM_PROMPT = """你是一个德州扑克游戏中的解释器。"""
+SYSTEM_PROMPT = """你是一个德州扑克游戏中的解释器。如果用户的输入和德州扑克无关，请提醒用户输入与德州扑克有关的信息！"""
 
 # pylint: disable=line-too-long
 USER_PROMPT = """结合玩家位置、对手位置、玩家手牌、对手手牌范围等信息，你需要通过下面几点对GTO结果中各项行动的原因进行解释：
@@ -210,14 +211,15 @@ def prepare_prompt(user_data: dict) -> str:
     data = {
         "user_spt": user_data["user_position"],
         "opponent_spt": user_data["opponent_position"],
-        "user_hand": user_data["user_hand"],
+        "user_hand": "".join(user_data["user_hand"]),
         "flop": "".join(user_data["flop"]),
         "turn": user_data["turn"][0] if user_data["turn"] else "",
         "river": user_data["river"][0] if user_data["river"] else "",
         "actions": actions,
     }
-    # json.dump(data, open("game_info_processed.json", "w"))
-    response = requests.post("http://127.0.0.1:8080/demo/getGto", json=data)
+    print(data)
+
+    response = requests.post("http://127.0.0.1:8081/demo/getGto", json=data)
     response = response.json()
     # print(response)
 
@@ -274,23 +276,16 @@ def prepare_prompt(user_data: dict) -> str:
         query=query,
     )
 
-    # with open("llm_agent/prompt.txt", "w") as f:
-    #     f.write(user_prompt)
-    #     f.close()
-
     return user_prompt
 
 
-def explain(sys_prompt: str, user_prompt: str, model: str) -> str:
+def explain(messages: str, model: str) -> str:
     if model == "deepseek":
         client = openai.OpenAI(base_url="https://api.deepseek.com")
         try:
             chat_completion = client.chat.completions.create(
                 model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                messages=messages,
                 stream=False,
                 temperature=1.3,
                 max_tokens=2048,
@@ -299,48 +294,9 @@ def explain(sys_prompt: str, user_prompt: str, model: str) -> str:
         except Exception as ex:
             print(ex)
             time.sleep(3)
-    elif model == "gemini":
-        # chinese to english
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        english_prompt = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents="Translate the following text into English: " + user_prompt,
-        )
-        english_response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=english_prompt.text,
-            config=types.GenerateContentConfig(max_output_tokens=2048, temperature=0.5),
-        )
-        chinese_response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents="Translate the following text into Chinese: "
-            + english_response.text,
-        )
-        return chinese_response.text
     return "LLM model error"
 
 
 def force_correct(content: str) -> str:
     # TODO: force correct terms and examples in a second LLM call
     return content
-
-
-def main() -> None:
-    """The main function."""
-    args = parse_arguments()
-
-    input_text = input(
-        "请输入当前信息，请至少包含双方位置、玩家手牌、公共牌面和双方动作："
-    )
-
-    user_data = extract_poker_info(input_text)
-    prompt = prepare_prompt(user_data)
-    content = explain(sys_prompt=SYSTEM_PROMPT, user_prompt=prompt, model=args.model)
-    content = force_correct(content)
-
-    with open(args.output_dir, mode="w", encoding="utf-8") as f:
-        f.write(content)
-        f.close()
-
-
-# main()
