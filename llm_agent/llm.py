@@ -230,7 +230,7 @@ def prepare_prompt(user_data: dict) -> str:
     }
     print("rust_input:\n", rust_input)
 
-    response = requests.post("http://127.0.0.1:8080/demo/getGto", json=rust_input)
+    response = requests.post("http://127.0.0.1:8081/demo/getGto", json=rust_input)
     response = response.json()
     print("response:\n", response)
 

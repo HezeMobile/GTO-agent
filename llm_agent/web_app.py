@@ -5,9 +5,7 @@ from game_info_extractor import extract_poker_info
 from poker_text_detector import PokerTextDetector
 
 app = Flask(__name__)
-app.secret_key = (
-    ""  # Required for session management
-)
+app.secret_key = ""  # Required for session management
 
 
 @app.route("/")
