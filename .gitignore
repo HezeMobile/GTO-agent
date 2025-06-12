@@ -1,4 +1,12 @@
+# Python bytecode files
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Existing specific files
 gto_facts_converter/__pycache__/board.cpython-37.pyc
 gto_facts_converter/__pycache__/hand.cpython-37.pyc
 gto_facts_converter/__pycache__/utils.cpython-37.pyc
 gto_facts_converter/__pycache__/test_combo_detect.cpython-37-pytest-7.4.4.pyc
+
