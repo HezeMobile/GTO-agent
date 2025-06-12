@@ -21,6 +21,14 @@ from gto_facts_converter import (
 from poker_text_detector import PokerTextDetector
 from game_info_extractor import extract_poker_info
 
+# Global variable to track if we should stop
+_should_stop = False
+
+
+def set_should_stop(value: bool):
+    global _should_stop
+    _should_stop = value
+
 
 TERM_MAP = {
     "high_card": "高牌",
@@ -63,26 +71,6 @@ USER_PROMPT = """结合玩家位置、对手位置、玩家手牌、对手手牌
 请基于下面的局面信息，按照初步分析，解释GTO结果中各项动作的原因：
 {query}
 """
-
-
-def parse_arguments() -> argparse.Namespace:
-    """Parse the command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Explain the GTO actions",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="deepseek",
-        help="The model used to generate explanation",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="llm_agent/outcome.txt",
-        help="Where to store the output.",
-    )
-    return parser.parse_args()
 
 
 def prepare_analysis1(board: list) -> str:
@@ -195,20 +183,43 @@ def prepare_analysis3(hand: str, board: list) -> str:
     return analysis3
 
 
+def determine_position(user_pos: str, opp_pos: str) -> str:
+    """Determine if the user is in position (IP) or out of position (OOP)."""
+    position_order = {
+        "SB": 0,
+        "BB": 1,
+        "UTG": 2,
+        "UTG+1": 3,
+        "UTG+2": 4,
+        "LJ": 5,
+        "HJ": 6,
+        "CO": 7,
+        "BTN": 8,
+    }
+
+    user_idx = position_order.get(user_pos, -1)
+    opp_idx = position_order.get(opp_pos, -1)
+
+    return "ip" if user_idx > opp_idx else "oop"
+
+
 def prepare_prompt(user_data: dict) -> str:
     # default variable for now
     effective_stack = 100
-    player_id = "ip"
+    player_id = determine_position(
+        user_data["user_position"], user_data["opponent_position"]
+    )
 
     # contruct rust API inputs
-    actions = copy.deepcopy(user_data["actions"])
-    if len(actions) >= 4:
-        actions.insert(4, "river")
-        actions.insert(2, "turn")
-    elif len(actions) >= 2:
-        actions.insert(2, "turn")
+    actions = user_data["flop_actions"].copy()
+    if user_data["turn_actions"]:
+        actions.append("turn")
+        actions.extend(user_data["turn_actions"])
+    if user_data["river_actions"]:
+        actions.append("river")
+        actions.extend(user_data["river_actions"])
 
-    data = {
+    rust_input = {
         "user_spt": user_data["user_position"],
         "opponent_spt": user_data["opponent_position"],
         "user_hand": "".join(user_data["user_hand"]),
@@ -217,25 +228,74 @@ def prepare_prompt(user_data: dict) -> str:
         "river": user_data["river"][0] if user_data["river"] else "",
         "actions": actions,
     }
-    print(data)
+    print("rust_input:\n", rust_input)
 
-    response = requests.post("http://127.0.0.1:8081/demo/getGto", json=data)
+    response = requests.post("http://127.0.0.1:8080/demo/getGto", json=rust_input)
     response = response.json()
-    # print(response)
+    print("response:\n", response)
 
-    board_str = data["flop"] + data["turn"] + data["river"]
+    board_str = rust_input["flop"] + rust_input["turn"] + rust_input["river"]
     board = [board_str[i : i + 2] for i in range(0, len(board_str), 2)]
 
     # game history
-    assert player_id == "ip"
-    action_history = user_data["actions"]
-    game = f"翻牌面是{board[0]}，{board[1]}，{board[2]}，对手{action_history[0]}"
-    if len(board) >= 4:
-        game += f"，玩家{action_history[1]}\n"
-        game += f"转牌面是{board[3]}，{board[0]}，{board[1]}，{board[2]}，对手{action_history[2]}"
-    if len(board) == 5:
-        game += f"，玩家{action_history[3]}\n"
-        game += f"河牌面是{board[4]}，{board[3]}，{board[0]}，{board[1]}，{board[2]}，对手{action_history[4]}"
+    if player_id == "ip":
+        game = f"翻牌面是{board[0]}，{board[1]}，{board[2]}，对手{user_data['flop_actions'][0]}"
+        for i in range(1, len(user_data["flop_actions"])):
+            if i % 2 == 1:
+                game += f"，玩家{user_data['flop_actions'][i]}"
+            else:
+                game += f"，对手{user_data['flop_actions'][i]}"
+
+        if len(board) >= 4:
+            game += f"\n转牌面是{board[3]}，{board[0]}，{board[1]}，{board[2]}"
+            if user_data["turn_actions"]:
+                game += f"，对手{user_data['turn_actions'][0]}"
+                for i in range(1, len(user_data["turn_actions"])):
+                    if i % 2 == 1:
+                        game += f"，玩家{user_data['turn_actions'][i]}"
+                    else:
+                        game += f"，对手{user_data['turn_actions'][i]}"
+
+        if len(board) == 5:
+            game += (
+                f"\n河牌面是{board[4]}，{board[3]}，{board[0]}，{board[1]}，{board[2]}"
+            )
+            if user_data["river_actions"]:
+                game += f"，对手{user_data['river_actions'][0]}"
+                for i in range(1, len(user_data["river_actions"])):
+                    if i % 2 == 1:
+                        game += f"，玩家{user_data['river_actions'][i]}"
+                    else:
+                        game += f"，对手{user_data['river_actions'][i]}"
+    else:
+        game = f"翻牌面是{board[0]}，{board[1]}，{board[2]}，玩家{user_data['flop_actions'][0]}"
+        for i in range(1, len(user_data["flop_actions"])):
+            if i % 2 == 1:
+                game += f"，对手{user_data['flop_actions'][i]}"
+            else:
+                game += f"，玩家{user_data['flop_actions'][i]}"
+
+        if len(board) >= 4:
+            game += f"\n转牌面是{board[3]}，{board[0]}，{board[1]}，{board[2]}"
+            if user_data["turn_actions"]:
+                game += f"，玩家{user_data['turn_actions'][0]}"
+                for i in range(1, len(user_data["turn_actions"])):
+                    if i % 2 == 1:
+                        game += f"，对手{user_data['turn_actions'][i]}"
+                    else:
+                        game += f"，玩家{user_data['turn_actions'][i]}"
+
+        if len(board) == 5:
+            game += (
+                f"\n河牌面是{board[4]}，{board[3]}，{board[0]}，{board[1]}，{board[2]}"
+            )
+            if user_data["river_actions"]:
+                game += f"，玩家{user_data['river_actions'][0]}"
+                for i in range(1, len(user_data["river_actions"])):
+                    if i % 2 == 1:
+                        game += f"，对手{user_data['river_actions'][i]}"
+                    else:
+                        game += f"，玩家{user_data['river_actions'][i]}"
 
     action_space = response["available_actions"]
     action_probs = response["available_actions_probability"]
@@ -256,14 +316,14 @@ def prepare_prompt(user_data: dict) -> str:
         board,
         effective_stack,
     )
-    analysis3 = prepare_analysis3(data["user_hand"], board)
+    analysis3 = prepare_analysis3(rust_input["user_hand"], board)
 
     # prepare query
     query = QUERY.format(
         effective_stack=effective_stack,
-        player_position=data["user_spt"],
-        op_position=data["opponent_spt"],
-        hand=data["user_hand"],
+        player_position=rust_input["user_spt"],
+        op_position=rust_input["opponent_spt"],
+        hand=rust_input["user_hand"],
         game=game,
         op_range=response["opponent_hands_range"],
         gto=gto,
@@ -276,13 +336,25 @@ def prepare_prompt(user_data: dict) -> str:
         query=query,
     )
 
+    print("user_prompt:\n", user_prompt)
+
     return user_prompt
 
 
-def explain(messages: str, model: str) -> str:
+def explain(messages: str, model: str, lang: str = "chinese") -> str:
+    global _should_stop
+    _should_stop = False  # Reset the stop flag when starting a new explanation
+
     if model == "deepseek":
         client = openai.OpenAI(base_url="https://api.deepseek.com")
         try:
+            if lang == "english":
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": "Please provide your response in English.",
+                    }
+                )
             chat_completion = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
@@ -290,6 +362,8 @@ def explain(messages: str, model: str) -> str:
                 temperature=1.3,
                 max_tokens=2048,
             )
+            if _should_stop:
+                return "Explanation stopped by user."
             return chat_completion.choices[0].message.content
         except Exception as ex:
             print(ex)

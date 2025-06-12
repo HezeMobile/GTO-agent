@@ -99,21 +99,30 @@ def format_game_info(game_info: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
 
     # Check actions
     plain_actions = ["Call", "Check"]
-    formatted_actions = []
 
-    for action in game_info.get("actions", []):
-        if action.startswith(("Bet(", "Raise(", "AllIn(")):
-            try:
-                amount = int(action.split("(")[1].rstrip(")"))
-                action_type = action.split("(")[0]
-                formatted_actions.append(f"{action_type}({amount})")
-            except (ValueError, IndexError):
-                continue
-        # Handle simple actions
-        elif action in plain_actions:
-            formatted_actions.append(action)
+    def format_actions(actions_list):
+        formatted_actions = []
+        for action in actions_list:
+            if action.startswith(("Bet(", "Raise(", "AllIn(")):
+                try:
+                    amount = int(action.split("(")[1].rstrip(")"))
+                    action_type = action.split("(")[0]
+                    formatted_actions.append(f"{action_type}({amount})")
+                except (ValueError, IndexError):
+                    continue
+            # Handle simple actions
+            elif action in plain_actions:
+                formatted_actions.append(action)
+        return formatted_actions
 
-    formatted_info["actions"] = formatted_actions
+    # Get actions for each street
+    flop_actions = game_info.get("flop_actions", [])
+    turn_actions = game_info.get("turn_actions", [])
+    river_actions = game_info.get("river_actions", [])
+
+    formatted_info["flop_actions"] = format_actions(flop_actions)
+    formatted_info["turn_actions"] = format_actions(turn_actions)
+    formatted_info["river_actions"] = format_actions(river_actions)
 
     return formatted_info, status_message
 
@@ -122,21 +131,25 @@ def extract_poker_info(input_text: str) -> tuple[Dict[str, Any], str]:
     game_info_empty = {
         "user_position": "",
         "opponent_position": "",
-        "user_hand": "",
+        "user_hand": [],
         "flop": "",
         "turn": "",
         "river": "",
-        "actions": [],
+        "flop_actions": [],
+        "turn_actions": [],
+        "river_actions": [],
     }
 
     prompt = f"""Extract the following poker information from the given text and format it as a JSON object:
     - User's position (BTN, SB, BB, etc.)
     - Opponent's position (BTN, SB, BB, etc.)
-    - User's hand (2 cards)
-    - Flop cards (3 cards)
+    - User's hand (2 cards, from the largest to smallest)
+    - Flop cards (3 cards, from the largest to smallest)
     - Turn card (1 card, optional)
     - River card (1 card, optional)
-    - All Actions (list of actions in forms like Bet(6), Bet(10), Call, etc.)
+    - Flop actions (list of actions in forms like Bet(6), Bet(10), Call, etc.)
+    - Turn actions (list of actions in forms like Bet(6), Bet(10), Call, etc.)
+    - River actions (list of actions in forms like Bet(6), Bet(10), Call, etc.)
 
     Input text: {input_text}
 
@@ -148,7 +161,9 @@ def extract_poker_info(input_text: str) -> tuple[Dict[str, Any], str]:
         "flop": ["cards1","cards2","cards3"],
         "turn": ["cards4"],
         "river": ["cards5"],
-        "actions": ["action1", "action2", ...]
+        "flop_actions": ["action1", "action2", ...],
+        "turn_actions": ["action1", "action2", ...],
+        "river_actions": ["action1", "action2", ...],
     }}
     """
 
@@ -172,6 +187,7 @@ def extract_poker_info(input_text: str) -> tuple[Dict[str, Any], str]:
         match = re.search(r"\{.*\}", result, re.DOTALL)
         if match:
             game_info = json.loads(match.group(0))
+            print("game_info:\n", game_info)
             formatted_info, status_message = format_game_info(game_info)
             return formatted_info, status_message
         else:

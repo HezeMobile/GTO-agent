@@ -81,7 +81,7 @@
     </style>
 </head>
 <body>
-    <h1>Poker LLM Assistant</h1>
+    <h1>Postflop GTO Coach</h1>
     <div id="chat-container">
         {% for message in conversation_history %}
             <div class="message {% if message.role == 'user' %}user-message{% else %}assistant-message{% endif %}">
@@ -90,7 +90,7 @@
         {% endfor %}
     </div>
     <div id="input-container">
-        <textarea id="user-input" placeholder="Enter your message here..." rows="3"></textarea>
+        <textarea id="user-input" placeholder="Please enter the current information, must include positions, player hands, board cards, and actions" rows="3"></textarea>
         <button id="send-btn">Send</button>
         <button id="clear-btn">Clear</button>
     </div>
@@ -152,6 +152,7 @@
                     success: function(response) {
                         if (response.success) {
                             $('#chat-container').empty();
+                            hideLoading();
                         }
                     }
                 });

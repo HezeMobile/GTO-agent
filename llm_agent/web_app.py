@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session
 import json
-from llm import prepare_prompt, explain, SYSTEM_PROMPT
+from llm import prepare_prompt, explain, SYSTEM_PROMPT, set_should_stop
 from game_info_extractor import extract_poker_info
 from poker_text_detector import PokerTextDetector
 
@@ -22,6 +22,9 @@ def index():
 
 @app.route("/process", methods=["POST"])
 def process():
+    # TODO: get lang from request
+    lang = "english"
+
     # Get the input text from the form
     input_text = request.json.get("text", "")
 
@@ -35,9 +38,10 @@ def process():
     if len(conversation_history) == 1:
         poker_text_detector = PokerTextDetector()
         if not poker_text_detector.is_poker_related(input_text):
-            content = "请输入与德州扑克有关的信息！"
+            content = "Please enter information related to Texas Hold'em poker!"
             print(content)
             session["conversation_history"] = []
+            session.clear()
             return jsonify(
                 {
                     "success": True,
@@ -54,6 +58,7 @@ def process():
             if "Error" in status_message:
                 print(status_message)
                 session["conversation_history"] = []
+                session.clear()
                 return jsonify(
                     {
                         "success": True,
@@ -64,16 +69,18 @@ def process():
 
             # Process the poker information
             prompt = prepare_prompt(user_data)
+
             messages = [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ]
-            content = explain(messages, "deepseek")
+            content = explain(messages, "deepseek", lang)
 
         except Exception as e:
-            error_message = f"处理过程中出现错误: {str(e)}"
+            error_message = f"An error occurred during processing: {str(e)}"
             print(error_message)
             session["conversation_history"] = []
+            session.clear()
             return jsonify(
                 {
                     "success": True,
@@ -87,7 +94,7 @@ def process():
             {"role": "system", "content": SYSTEM_PROMPT},
             *conversation_history,
         ]
-        content = explain(messages, "deepseek")
+        content = explain(messages, "deepseek", lang)
 
     # Add assistant response to history
     conversation_history.append({"role": "assistant", "content": content})
@@ -108,6 +115,10 @@ def process():
 def clear_history():
     # Clear the conversation history
     session["conversation_history"] = []
+    # Set the stop flag
+    set_should_stop(True)
+    # Clear all session variables
+    session.clear()
     return jsonify({"success": True})
 
 
